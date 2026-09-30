@@ -1,8 +1,23 @@
 from pathlib import Path
 import polars as pl
 
-kcat_df_raw = pl.read_csv(Path(__file__).parent / "cache/raw/kcat_train.csv")
-km_df_raw = pl.read_csv(Path(__file__).parent / "cache/raw/km_train.csv")
+files = ['kcat_train.csv', 'kcat_test.csv', 'kcat_val.csv', 'km_train.csv', 'km_test.csv', 'km_val.csv']
+
+kcat_files = [] 
+km_files = []
+
+for file in files:
+    df = pl.read_csv(Path(__file__).parent / "cache/raw" / file)
+
+    # print(key, files[key].head())
+
+    if file.startswith('kcat'):
+        kcat_files.append(df)
+    elif file.startswith('km'):
+        km_files.append(df)
+
+kcat_df = pl.concat(kcat_files)
+km_df = pl.concat(km_files)
 
 
 def clean_data(df):
@@ -12,49 +27,42 @@ def clean_data(df):
 
     return df
 
-kcat_df = clean_data(kcat_df_raw)
-km_df = clean_data(km_df_raw)
+kcat_df = clean_data(kcat_df)
+km_df = clean_data(km_df)
 
 
-def shared_reaction_params(_kcat_df, _km_df):
+kcat_df = kcat_df.rename({'reactant_smiles': 'substrate_smiles'})
 
-    reaction_keys = {
-        'uniprot_id': 'uniprot', 
-        'kcat_substrate_str': 'reactant_smiles',
-        'km_substrate_str': 'substrate_smiles'
-    }
 
-    unique_reactions = (
-        pl.concat([
-            _kcat_df.select(
-                [reaction_keys['uniprot_id'], 
-                 reaction_keys['kcat_substrate_str']]
-            ).rename({reaction_keys['kcat_substrate_str']: 'smiles'}),
-            _km_df.select(
-                [reaction_keys['uniprot_id'], 
-                 reaction_keys['km_substrate_str']]
-            ).rename({reaction_keys['km_substrate_str']: 'smiles'})
-        ]).unique().with_columns(
-            reaction_id = pl.int_range(1, pl.len() + 1)
+def shared_reaction_params(_kcat_df, _km_df, *, filter: bool = True):
+
+    def add_uid_str_column(df):
+        return df.with_columns(
+            (pl.col('uniprot') + '_' + pl.col('substrate_smiles')).alias('uid_str')
+        ).filter(
+            pl.col('uid_str').is_unique()
+        )
+
+    _kcat_df = add_uid_str_column(_kcat_df)
+    _km_df = add_uid_str_column(_km_df)
+
+    if not filter:
+        return _km_df, _kcat_df
+
+    
+    _km_df_shared = _km_df.filter(
+        pl.col('uid_str').is_in(
+            _kcat_df.select('uid_str').to_series().to_list()
         )
     )
-
-    _kcat_df = _kcat_df.join(
-        unique_reactions.rename({'smiles': reaction_keys['kcat_substrate_str']}),
-        on=[reaction_keys['uniprot_id'], reaction_keys['kcat_substrate_str']],
-        how='left'
+    return _km_df_shared, _kcat_df.filter(
+        pl.col('uid_str').is_in(
+            _km_df_shared.select('uid_str').to_series().to_list()
+        )
     )
-
-    _km_df = _km_df.join(
-        unique_reactions.rename({'smiles': reaction_keys['km_substrate_str']}),
-        on=[reaction_keys['uniprot_id'], reaction_keys['km_substrate_str']],
-        how='left'
-    )
-
-    return _kcat_df, _km_df
 
 
 kcat_df_shared, km_df_shared = shared_reaction_params(kcat_df, km_df)
 
-kcat_df_shared.write_csv(Path(__file__).parent / "cache/processed/kcat_train_shared.csv")
-km_df_shared.write_csv(Path(__file__).parent / "cache/processed/km_train_shared.csv")
+kcat_df_shared.write_csv(Path(__file__).parent / "cache/processed/kcat_train_processed.csv")
+km_df_shared.write_csv(Path(__file__).parent / "cache/processed/km_train_processed.csv")

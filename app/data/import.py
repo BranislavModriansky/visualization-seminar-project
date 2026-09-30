@@ -1,8 +1,10 @@
 import polars as pl
 from pathlib import Path
 
-dkcat_df = pl.read_csv(r"hf://datasets/RosettaCommons/CatPred-DB/kcat/kcat_train.csv")
-km_df = pl.read_csv(r"hf://datasets/RosettaCommons/CatPred-DB/km/km_train.csv")
+kcat_splits = {'train': 'kcat/kcat_train.csv', 'test': 'kcat/kcat_test.csv', 'val': 'kcat/kcat_val.csv'}
+km_splits = {'train': 'km/km_train.csv', 'test': 'km/km_test.csv', 'val': 'km/km_val.csv'}
 
-dkcat_df.write_csv(Path(__file__).parent / "cache/raw/kcat_train.csv")
-km_df.write_csv(Path(__file__).parent / "cache/raw/km_train.csv")
+for csv in list(kcat_splits.values()) + list(km_splits.values()):
+    df = pl.read_csv("hf://datasets/RosettaCommons/CatPred-DB/" + csv, schema_overrides={'temperature': pl.Float64})
+
+    df.write_csv(Path(__file__).parent / "cache/raw/" / Path(csv).name)
