@@ -16,12 +16,12 @@ def _drop_invalid_entries(dfs: list[pl.DataFrame], **kw):
     for i, df in enumerate(dfs):
         if kw.get("verbose", False):
             print(f"\nProcessing DataFrame {i}:")
-            print(f"Rows in DataFrame {i} before cleaning: \n{len(df)}")
+            print(f"Shape of DataFrame {i} before cleaning: \n{df.shape}")
 
         dfs[i] = df.drop_nulls().unique()
 
         if kw.get("verbose", False):
-            print(f"Rows in DataFrame {i} after cleaning (drop_nulls + unique): \n{len(dfs[i])}")
+            print(f"Shape of DataFrame {i} after cleaning (drop_nulls + unique): \n{dfs[i].shape}")
 
     return dfs
 
@@ -64,7 +64,7 @@ def _get_shared_reactions(dfs: tuple[pl.DataFrame, pl.DataFrame], **kw):
     def _make_uid_str_column(dfs: list[pl.DataFrame]):
         for i, df in enumerate(dfs):
             if kw.get("verbose", False):
-                print(f"Rows in DataFrame {i} before filtering: {len(df)}")
+                print(f"Shape of DataFrame {i} before filtering: {df.shape}")
 
             dfs[i] = df.with_columns(
                 (pl.col('uniprot') + '_' + pl.col('substrate_smiles')).alias('uid_str')
@@ -81,7 +81,7 @@ def _get_shared_reactions(dfs: tuple[pl.DataFrame, pl.DataFrame], **kw):
     def _assign_int_uid_column(dfs: list[pl.DataFrame]):
         for i, df in enumerate(dfs):
             if kw.get("verbose", False):
-                print(f"Rows in DataFrame {i} after filtering to only shared entries: {len(df)}")
+                print(f"Shape of DataFrame {i} after filtering to only shared entries: {df.shape}")
             
             dfs[i] = df.sort('uid_str').with_row_index('uid_int', offset=0)
         return dfs
