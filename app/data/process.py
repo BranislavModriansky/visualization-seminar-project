@@ -1,5 +1,6 @@
-from pathlib import Path
 from typing import Optional
+from pathlib import Path
+
 import polars as pl
 
 from warnings import warn
@@ -8,7 +9,28 @@ from warnings import warn
 # Helper functions for processing kcat and km data
 # -------------------------------------------------
 
-def _remove_columns(df, *, columns: list = None, right_from: Optional[str | int] = None, left_from: Optional[str | int] = None):
+def _drop_invalid_entries(dfs: list[pl.DataFrame], **kw):
+    if kw.get("verbose", False):
+        print("\n_drop_invalid_entries():")
+
+    for i, df in enumerate(dfs):
+        if kw.get("verbose", False):
+            print(f"\nProcessing DataFrame {i}:")
+            print(f"Rows in DataFrame {i} before cleaning: \n{len(df)}")
+
+        dfs[i] = df.drop_nulls().unique()
+
+        if kw.get("verbose", False):
+            print(f"Rows in DataFrame {i} after cleaning (drop_nulls + unique): \n{len(dfs[i])}")
+
+    return dfs
+
+def _remove_columns(df, *, columns: list = None, right_from: Optional[str | int] = None, left_from: Optional[str | int] = None, **kw):
+
+    if kw.get("verbose", False):
+        print(f"\n_remove_columns():")
+        print(f"Removing columns from the input DataFrame.")
+        print(f"{len(df.columns)} columns in the input DataFrame: \n{df.columns}")
 
     if columns is not None:
         df = df.drop(columns)
@@ -23,11 +45,16 @@ def _remove_columns(df, *, columns: list = None, right_from: Optional[str | int]
 
     if columns is None and right_from is None and left_from is None:
         warn("No input to remove_columns() func. No columns removed.", category=UserWarning, stacklevel=2)
+
+    if kw.get("verbose", False):
+        print(f"{len(df.columns)} columns in the result DataFrame: \n{df.columns}")
     
     return df
 
 
-def _get_shared_reactions(dfs: tuple[pl.DataFrame, pl.DataFrame]):
+def _get_shared_reactions(dfs: tuple[pl.DataFrame, pl.DataFrame], **kw):
+    if kw.get("verbose", False):
+        print(f"\n_get_shared_reactions():")
 
     if not dfs or len(dfs) != 2:
         raise ValueError("Expected a tuple of two DataFrames.")
@@ -36,6 +63,9 @@ def _get_shared_reactions(dfs: tuple[pl.DataFrame, pl.DataFrame]):
 
     def _make_uid_str_column(dfs: list[pl.DataFrame]):
         for i, df in enumerate(dfs):
+            if kw.get("verbose", False):
+                print(f"Rows in DataFrame {i} before filtering: {len(df)}")
+
             dfs[i] = df.with_columns(
                 (pl.col('uniprot') + '_' + pl.col('substrate_smiles')).alias('uid_str')
             ).filter(
@@ -50,6 +80,9 @@ def _get_shared_reactions(dfs: tuple[pl.DataFrame, pl.DataFrame]):
 
     def _assign_int_uid_column(dfs: list[pl.DataFrame]):
         for i, df in enumerate(dfs):
+            if kw.get("verbose", False):
+                print(f"Rows in DataFrame {i} after filtering to only shared entries: {len(df)}")
+            
             dfs[i] = df.sort('uid_str').with_row_index('uid_int', offset=0)
         return dfs
 
@@ -80,18 +113,20 @@ for file in files:
 
 
 # Concatenate to get single kcat and km DataFrames with only unique and non-null rows
-kcat_df = pl.concat(kcat_files).drop_nulls().unique()
-km_df = pl.concat(km_files).drop_nulls().unique()
+kcat_df = pl.concat(kcat_files)
+km_df = pl.concat(km_files)
+
+kcat_df, km_df = _drop_invalid_entries([kcat_df, km_df], verbose=True)
 
 # Remove all (unnecessary) columns to the right of 'pdbpath'
-kcat_df = _remove_columns(kcat_df, right_from='pdbpath')
-km_df = _remove_columns(km_df, right_from='pdbpath')
+kcat_df = _remove_columns(kcat_df, right_from='pdbpath', verbose = True)
+km_df = _remove_columns(km_df, right_from='pdbpath', verbose = True)
 
 # Rename 'reactant_smiles' column to 'substrate_smiles' in kcat DataFrame
 kcat_df = kcat_df.rename({'reactant_smiles': 'substrate_smiles'})
 
 # Get shared reactions between kcat and km DataFrames
-kcat_df, km_df = _get_shared_reactions((kcat_df, km_df))
+kcat_df, km_df = _get_shared_reactions((kcat_df, km_df), verbose=True)
 
 kcat_df.write_csv(Path(__file__).parent / "cache/processed/kcat_processed.csv")
 km_df.write_csv(Path(__file__).parent / "cache/processed/km_processed.csv")
