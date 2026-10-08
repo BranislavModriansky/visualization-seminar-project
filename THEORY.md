@@ -13,7 +13,7 @@
 - ↑ $K_M$ low affinity weaker binding 
 - units: molarity 
 
-## $k_{cat}$/$K_M$
+## $k_{cat}/K_M$
 - specificity constant/kinetic efficiency
 - efficiency of substrate conversion by enzyme 
 - units: $s^{-1}M^{-1}$ 
